@@ -7,8 +7,14 @@
 using UnityEngine;
 using System.Collections.Generic;
 using Leap;
+using System.Collections.Generic;
+using CSharpSynth.Effects;
+using CSharpSynth.Sequencer;
+using CSharpSynth.Synthesis;
+using CSharpSynth.Midi;
 
 // Overall Controller object that will instantiate hands and tools when they appear.
+[RequireComponent (typeof(AudioSource))]
 public class HandController : MonoBehaviour {
 
   // Reference distance from thumb base to pinky base in mm.
@@ -43,11 +49,44 @@ public class HandController : MonoBehaviour {
   private Dictionary<int, HandModel> hand_graphics_;
   private Dictionary<int, HandModel> hand_physics_;
   private Dictionary<int, ToolModel> tools_;
+
+	//Public
+	//Check the Midi's file folder for different songs
+	public string midiFilePath = "Midis/Groove.mid";
+	//Try also: "FM Bank/fm" or "Analog Bank/analog" for some different sounds
+	public string bankFilePath = "GM Bank/gm";
+	public int bufferSize = 1024;
+	public int midiNote = 60;
+	public int midiNoteVolume = 100;
+	public int midiInstrument = 1;
+	//Private 
+	private float[] sampleBuffer;
+	private float gain = 1f;
+	private MidiSequencer midiSequencer;
+	private StreamSynthesizer midiStreamSynthesizer;
+	
+	private float sliderValue = 1.0f;
+	private float maxSliderValue = 127.0f;
   
   void OnDrawGizmos() {
     Gizmos.matrix = Matrix4x4.Scale(GIZMO_SCALE * Vector3.one);
     Gizmos.DrawIcon(transform.position, "leap_motion.png");
   }
+
+	void Awake ()
+	{
+		midiStreamSynthesizer = new StreamSynthesizer (44100, 2, bufferSize, 40);
+		sampleBuffer = new float[midiStreamSynthesizer.BufferSize];		
+		
+		midiStreamSynthesizer.LoadBank (bankFilePath);
+		
+		midiSequencer = new MidiSequencer (midiStreamSynthesizer);
+		midiSequencer.LoadMidi (midiFilePath, false);
+		//These will be fired by the midiSequencer when a song plays. Check the console for messages
+		midiSequencer.NoteOnEvent += new MidiSequencer.NoteOnEventHandler (MidiNoteOnHandler);
+		midiSequencer.NoteOffEvent += new MidiSequencer.NoteOffEventHandler (MidiNoteOffHandler);	
+		
+	}
 
   void Start() {
     leap_controller_ = new Controller();
@@ -225,6 +264,17 @@ public class HandController : MonoBehaviour {
     UpdateRecorder();
     Frame frame = GetFrame();
     UpdateHandModels(hand_graphics_, frame.Hands, leftGraphicsModel, rightGraphicsModel);
+		Hand rh = frame.Hands.Rightmost;
+		Vector position = rh.PalmPosition;
+		Vector velocity = rh.PalmVelocity;
+		Vector direction = rh.Direction;
+		int midiNote2 = (int)((position.x + 270.0) / 6.0);
+		Debug.Log (midiNote2.ToString () + midiNote.ToString ());
+		if ((int)midiNote2 != midiNote) {
+			midiStreamSynthesizer.NoteOff (1, midiNote);
+			midiNote = (int)midiNote2;
+			midiStreamSynthesizer.NoteOn (1, midiNote, midiNoteVolume, midiInstrument);
+		}
   }
 
   void FixedUpdate() {
@@ -234,6 +284,7 @@ public class HandController : MonoBehaviour {
     Frame frame = GetFrame();
     UpdateHandModels(hand_physics_, frame.Hands, leftPhysicsModel, rightPhysicsModel);
     UpdateToolModels(tools_, frame.Tools, toolModel);
+	
   }
 
   public float GetRecordingProgress() {
@@ -291,4 +342,24 @@ public class HandController : MonoBehaviour {
       recorder_.NextFrame();
     }
   }
+	private void OnAudioFilterRead (float[] data, int channels)
+	{
+		
+		//This uses the Unity specific float method we added to get the buffer
+		midiStreamSynthesizer.GetNext (sampleBuffer);
+		
+		for (int i = 0; i < data.Length; i++) {
+			data [i] = sampleBuffer [i] * gain;
+		}
+	}
+	
+	public void MidiNoteOnHandler (int channel, int note, int velocity)
+	{
+		Debug.Log ("NoteOn: " + note.ToString () + " Velocity: " + velocity.ToString ());
+	}
+	
+	public void MidiNoteOffHandler (int channel, int note)
+	{
+		Debug.Log ("NoteOff: " + note.ToString ());
+	}
 }

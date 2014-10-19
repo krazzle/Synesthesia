@@ -9,6 +9,7 @@ using System.Collections;
 using Leap;
 
 // The model for our skeletal hand made out of various polyhedra.
+[RequireComponent (typeof(AudioSource))]
 public class SkeletalHandParticle : HandModel {
 
   protected const float PALM_CENTER_OFFSET = 0.0150f;
@@ -56,5 +57,4 @@ public class SkeletalHandParticle : HandModel {
     }
   }
 }
-
 
