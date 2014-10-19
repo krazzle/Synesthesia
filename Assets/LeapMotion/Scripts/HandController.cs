@@ -58,7 +58,7 @@ public class HandController : MonoBehaviour {
 	public int bufferSize = 1024;
 	public int midiNote = 60;
 	public int midiNoteVolume = 100;
-	public int midiInstrument = 1;
+	public int midiInstrument = 89;
 	//Private 
 	private float[] sampleBuffer;
 	private float gain = 1f;
@@ -67,6 +67,8 @@ public class HandController : MonoBehaviour {
 	
 	private float sliderValue = 1.0f;
 	private float maxSliderValue = 127.0f;
+
+	private int prevHandXVelocity = 0;
   
   void OnDrawGizmos() {
     Gizmos.matrix = Matrix4x4.Scale(GIZMO_SCALE * Vector3.one);
@@ -264,17 +266,45 @@ public class HandController : MonoBehaviour {
     UpdateRecorder();
     Frame frame = GetFrame();
     UpdateHandModels(hand_graphics_, frame.Hands, leftGraphicsModel, rightGraphicsModel);
+		if (Input.GetKeyDown(KeyCode.D)) {
+			midiInstrument += 1;
+			if(midiInstrument > 127)
+				midiInstrument = 1;
+			midiStreamSynthesizer.NoteOff (1, midiNote);
+			midiNote = -1;
+		}
+		if (Input.GetKeyDown(KeyCode.A)) {
+			midiInstrument -= 1;
+			if (midiInstrument < 1)
+				midiInstrument = 127;
+			midiStreamSynthesizer.NoteOff (1, midiNote);
+			midiNote = -1;
+		}
 		Hand rh = frame.Hands.Rightmost;
 		Vector position = rh.PalmPosition;
 		Vector velocity = rh.PalmVelocity;
 		Vector direction = rh.Direction;
-		int midiNote2 = (int)((position.x + 270.0) / 6.0);
-		Debug.Log (midiNote2.ToString () + midiNote.ToString ());
-		if ((int)midiNote2 != midiNote) {
+		int velocity_x = (int)velocity.x;
+		//int midiNote2 = (int)((position.x + 275.0) / 6.0);
+	    //midiNoteVolume = (int)(-(position.z - 275.0) / 5.5); 
+
+		midiNoteVolume = (int)velocity.Magnitude / 5;
+		midiStreamSynthesizer.setVolume (1, midiNoteVolume);
+
+
+		if(((velocity_x >> 31) & 0x1) != ((prevHandXVelocity >> 31) &0x1)){
+			midiStreamSynthesizer.NoteOff (1, midiNote);
+			midiNote = (int)((position.y + 275.0) / 6.0);
+			midiStreamSynthesizer.NoteOn (1, midiNote, midiNoteVolume, midiInstrument);
+
+		}
+		Debug.Log ("Velocity Magnitude is: " + velocity.ToString ());
+		/*if ((int)midiNote2 != midiNote) {
 			midiStreamSynthesizer.NoteOff (1, midiNote);
 			midiNote = (int)midiNote2;
 			midiStreamSynthesizer.NoteOn (1, midiNote, midiNoteVolume, midiInstrument);
-		}
+		}*/
+		prevHandXVelocity = (int)velocity.x;
   }
 
   void FixedUpdate() {
